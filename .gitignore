@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+.env
+checkpoints/stage*/
+data/corpus/*.txt
+data/sft/*.jsonl
+data/dpo/*.jsonl
+data/events/*.jsonl
+data/corpus/manifest.json
+*.parquet
+*.safetensors
+*.bin
+.ipynb_checkpoints/
+# IDE / tool directories
+.antigravity-ide/
+.antigravity/
+.gemini/
+# Generated zip files
+*.zip
+# Eval generated files
+eval/eval_data_raw.jsonl
+eval/eval_data.jsonl
+eval/decontam_flagged.jsonl

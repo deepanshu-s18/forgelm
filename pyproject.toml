@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forgelm"
+version = "0.1.0"
+description = "ForgeLM — Domain-Adapted Financial LLM (3-stage pipeline: DAPT → SFT → DPO)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "tqdm>=4.65",
+    "structlog>=23.0",
+]
+
+[project.optional-dependencies]
+# CPU-only: data pipeline + eval (no GPU required)
+pipeline = [
+    "anthropic>=0.40.0",
+    "tiktoken>=0.6",
+]
+# GPU training (Colab/Kaggle T4)
+train = [
+    "torch>=2.1",
+    "transformers>=4.40",
+    "peft>=0.11",
+    "trl>=0.9",
+    "bitsandbytes>=0.43",
+    "datasets>=2.19",
+    "accelerate>=0.30",
+]
+# Serving
+serve = [
+    "vllm>=0.5",
+    "openai>=1.30",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov",
+    "ruff>=0.4.0",
+    "hypothesis>=6.100",
+    "anthropic>=0.40.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["forgelm*", "shared_schemas*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["notebooks/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
