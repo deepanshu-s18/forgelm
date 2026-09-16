@@ -1,5 +1,7 @@
-from forgelm.data_pipeline.download_edgar import fetch_cik, fetch_filings, extract_sections, _clean
 import requests
+
+from forgelm.data_pipeline.download_edgar import extract_sections
+
 
 def custom_fetch_text(cik: str, accession: str) -> str:
     idx_url = (
@@ -8,7 +10,7 @@ def custom_fetch_text(cik: str, accession: str) -> str:
     )
     resp = requests.get(idx_url, headers={"User-Agent": "Deepanshu Singh/1.0 (deepanshu.singh@example.com)"})
     idx = resp.json()
-    
+
     docs = []
     for doc in idx.get("directory", {}).get("item", []):
         name = doc.get("name", "")
@@ -16,13 +18,13 @@ def custom_fetch_text(cik: str, accession: str) -> str:
             size_str = doc.get("size", "0")
             size = int(size_str) if size_str else 0
             docs.append((size, name))
-            
+
     if not docs:
         return ""
-    
+
     docs.sort(reverse=True)
     largest_name = docs[0][1]
-    
+
     doc_url = (
         f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
         f"{accession}/{largest_name}"

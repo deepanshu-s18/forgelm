@@ -136,7 +136,7 @@ def fetch_text(cik: str, accession: str) -> str:
         idx = resp.json()
     except Exception:
         return ""
-    
+
     # primary document: largest .htm file in the filing index
     docs = []
     for doc in idx.get("directory", {}).get("item", []):
@@ -145,13 +145,13 @@ def fetch_text(cik: str, accession: str) -> str:
             size_str = doc.get("size", "0")
             size = int(size_str) if size_str else 0
             docs.append((size, name))
-            
+
     if not docs:
         return ""
-        
+
     docs.sort(reverse=True)
     largest_name = docs[0][1]
-    
+
     doc_url = (
         f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
         f"{accession}/{largest_name}"

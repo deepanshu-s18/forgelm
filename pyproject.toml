@@ -55,7 +55,7 @@ include = ["forgelm*", "shared_schemas*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["notebooks/"]
+extend-exclude = ["notebooks/", "debug_edgar.py", "test_gemini.py", "test_gemini2.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]

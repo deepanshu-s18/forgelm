@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import structlog
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from shared_schemas.tool_schemas import UNIVERSE_TICKERS, EventRecord
@@ -114,7 +115,6 @@ def _generate_snippet(ticker: str, rng: random.Random) -> str:
     return snippet
 
 
-from tenacity import retry, wait_exponential, stop_after_attempt
 
 @retry(wait=wait_exponential(multiplier=1.0, min=1, max=3), stop=stop_after_attempt(2))
 def _call_gemini(client, snippet: str) -> str:

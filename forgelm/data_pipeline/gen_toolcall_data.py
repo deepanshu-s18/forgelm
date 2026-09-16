@@ -28,6 +28,7 @@ from pathlib import Path
 
 import structlog
 from pydantic import ValidationError
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from shared_schemas.tool_schemas import (
@@ -94,7 +95,8 @@ the correct sequence of tool calls to test the described hypotheses.
 Rules:
 1. Only use tickers from the universe: {universe}
 2. Dates must be between 2015-01-01 and 2025-12-31
-3. CRITICAL RULE: When testing more than 1 hypothesis (n_hypotheses > 1), you MUST include 'apply_bonferroni' or 'apply_bh_fdr' in the tool_calls list to correct for multiple testing.
+3. CRITICAL RULE: When n_hypotheses > 1 you MUST include
+   'apply_bonferroni' or 'apply_bh_fdr' in tool_calls to correct for multiple testing.
 4. Return valid JSON matching this schema:
 {{
   "user_query": "<restate the scenario as a research question>",
@@ -128,7 +130,7 @@ def _fill_template(template: dict, rng: random.Random) -> str:
     )
 
 
-from tenacity import retry, wait_exponential, stop_after_attempt
+
 
 def _build_fallback_sample(scenario: str, tmpl: dict, rng: random.Random) -> dict:
     """Build a valid HypothesisToolCall programmatically when the API is unavailable."""
@@ -137,9 +139,11 @@ def _build_fallback_sample(scenario: str, tmpl: dict, rng: random.Random) -> dic
     tool_calls = []
     for t in tickers:
         tool_calls.append({"tool_name": "get_ohlcv",
-                           "arguments": {"ticker": t, "start": "2015-01-01", "end": "2024-12-31"}})
+                           "arguments": {"ticker": t,
+                                         "start": "2015-01-01", "end": "2024-12-31"}})
     tool_calls.append({"tool_name": "run_ttest_1samp",
-                       "arguments": {"ticker": tickers[0], "popmean": 0.0, "alternative": "greater"}})
+                       "arguments": {"ticker": tickers[0],
+                                     "popmean": 0.0, "alternative": "greater"}})
     if n_hyp > 1:
         extra_p = [round(rng.uniform(0.01, 0.2), 4) for _ in range(n_hyp)]
         tool_calls.append({"tool_name": "apply_bonferroni",
@@ -239,7 +243,9 @@ def run_generation(out_path: Path, n_target: int = 500, seed: int = 42) -> dict:
             samples.append(entry)
             f_out.write(json.dumps(entry) + "\n")
             f_out.flush()
-            print(f"[{len(samples)}/{n_target}] Generated ({tmpl['family']}) in {attempts} attempt(s)", flush=True)
+            fam = tmpl['family']
+            print(f"[{len(samples)}/{n_target}] Generated ({fam}) in {attempts} attempt(s)",
+                  flush=True)
 
     stats = {
         "n_generated": len(samples),

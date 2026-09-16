@@ -1,5 +1,5 @@
-from tenacity import retry, wait_exponential, stop_after_attempt
 from google import genai
+
 client = genai.Client(api_key="AQ.Ab8RN6IzCNLFOOI1KR6SO1zk2iZmXnK9WHIxvlSjuhu7a_VGeg")
 
 def test(model):
