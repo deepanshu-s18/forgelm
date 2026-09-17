@@ -31,7 +31,7 @@ def load_dpo_dataset(pairs_path: Path, tokenizer, seed: int = 42):
 
     from datasets import Dataset
 
-    pairs = [json.loads(line) for line in pairs_path.read_text().splitlines() if line.strip()()]
+    pairs = [json.loads(line) for line in pairs_path.read_text().splitlines() if line.strip()]
     random.Random(seed).shuffle(pairs)
 
     # DPO format: prompt, chosen, rejected

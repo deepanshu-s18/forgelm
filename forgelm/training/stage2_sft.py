@@ -67,8 +67,8 @@ def load_sft_dataset(toolcall_path: Path, events_path: Path, tokenizer, seed: in
 
     rng = random.Random(seed)
 
-    tc_raw = [json.loads(line) for line in toolcall_path.read_text().splitlines() if line.strip()()]
-    ev_raw = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()()]
+    tc_raw = [json.loads(line) for line in toolcall_path.read_text().splitlines() if line.strip()]
+    ev_raw = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
 
     # 70/30 split by count
     n_tc = int((len(tc_raw) + len(ev_raw)) * TOOLCALL_FRACTION)
