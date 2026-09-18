@@ -107,3 +107,41 @@ def load_base_model(model_id: str, bnb_config):
     )
     model.config.use_cache = False
     return model, tokenizer
+
+
+def merge_and_save_adapter(base_model_path: str, adapter_path: str, output_dir: Path | str) -> str:
+    """Merge a LoRA adapter into base weights and save as a standalone model.
+
+    Solves the PEFT chaining problem across multi-stage training (DAPT -> SFT -> DPO)
+    by ensuring each downstream stage loads a unified model rather than stacking
+    multiple unmerged adapters over a frozen 4-bit base.
+    """
+    import torch
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    log.info(
+        "merging_adapter",
+        base=str(base_model_path),
+        adapter=str(adapter_path),
+        out=str(out_path),
+    )
+    # Load unquantized in float16/bfloat16 to merge losslessly
+    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    base = AutoModelForCausalLM.from_pretrained(
+        str(base_model_path),
+        torch_dtype=dtype,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    model = PeftModel.from_pretrained(base, str(adapter_path))
+    merged = model.merge_and_unload()
+    merged.save_pretrained(str(out_path))
+
+    tokenizer = AutoTokenizer.from_pretrained(str(adapter_path), trust_remote_code=True)
+    tokenizer.save_pretrained(str(out_path))
+    log.info("merge_complete", out=str(out_path))
+    return str(out_path)

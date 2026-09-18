@@ -60,20 +60,38 @@ def train(cfg: StageConfig, stage2_dir: Path, pairs_path: Path) -> dict:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Reference model (frozen) — the SFT checkpoint
-    ref_model = AutoModelForCausalLM.from_pretrained(
-        cfg.base_model, quantization_config=bnb_config, device_map="auto",
-        trust_remote_code=True,
-    )
-    ref_model = PeftModel.from_pretrained(ref_model, str(stage2_dir))
+    adapter_cfg = stage2_dir / "adapter_config.json"
+    if adapter_cfg.exists():
+        log.info("loading_peft_adapter", adapter_dir=str(stage2_dir))
+        # Reference model (frozen) — the SFT adapter
+        ref_model = AutoModelForCausalLM.from_pretrained(
+            cfg.base_model, quantization_config=bnb_config, device_map="auto",
+            trust_remote_code=True,
+        )
+        ref_model = PeftModel.from_pretrained(ref_model, str(stage2_dir))
 
-    # Policy model (trainable)
-    policy = AutoModelForCausalLM.from_pretrained(
-        cfg.base_model, quantization_config=bnb_config, device_map="auto",
-        trust_remote_code=True,
+        # Policy model (trainable)
+        policy = AutoModelForCausalLM.from_pretrained(
+            cfg.base_model, quantization_config=bnb_config, device_map="auto",
+            trust_remote_code=True,
+        )
+        policy = PeftModel.from_pretrained(policy, str(stage2_dir))
+    else:
+        log.info("loading_merged_base", model_dir=str(stage2_dir))
+        from peft import get_peft_model
+        ref_model = AutoModelForCausalLM.from_pretrained(
+            str(stage2_dir), quantization_config=bnb_config, device_map="auto",
+            trust_remote_code=True,
+        )
+        policy = AutoModelForCausalLM.from_pretrained(
+            str(stage2_dir), quantization_config=bnb_config, device_map="auto",
+            trust_remote_code=True,
+        )
+        policy = get_peft_model(policy, lora_config)
+
+    policy = prepare_model_for_kbit_training(
+        policy, use_gradient_checkpointing=cfg.gradient_checkpointing
     )
-    policy = PeftModel.from_pretrained(policy, str(stage2_dir))
-    policy = prepare_model_for_kbit_training(policy, use_gradient_checkpointing=cfg.gradient_checkpointing)  # noqa: E501
 
     dataset = load_dpo_dataset(pairs_path, tokenizer, seed=cfg.seed)
     out_dir = cfg.output_dir / "stage3_dpo"

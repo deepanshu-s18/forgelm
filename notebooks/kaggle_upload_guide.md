@@ -4,21 +4,18 @@ Step-by-step to go from local data → trained model on Kaggle in one session.
 
 ---
 
-## Step 1 — Get Anthropic API Key (~2 min)
+## Step 1 — API Key / Offline Setup (~2 min)
 
-1. Go to https://console.anthropic.com
-2. Click **API Keys** → **Create Key**
-3. Copy the key (`sk-ant-...`)
-4. Run locally: `export ANTHROPIC_API_KEY=sk-ant-...`
-
-**Cost estimate:**
-- `gen_toolcall_data.py --n-target 500`: ~$6–8
-- `gen_sft_events.py --n-target 200`: ~$2–3
-- Total: **~$8–12**
+ForgeLM supports three data generation routes:
+- **Option A (Google Gemini, Free)**: Get a free key at [aistudio.google.com](https://aistudio.google.com), run `export GEMINI_API_KEY=...`
+- **Option B (Anthropic Claude)**: Go to [console.anthropic.com](https://console.anthropic.com), copy key, run `export ANTHROPIC_API_KEY=...`
+- **Option C (Fully Offline / Pre-generated)**: Skip generation entirely — the repo already includes full pre-generated, schema-validated training and eval datasets in `data/sft/`, `data/dpo/`, and `eval/`!
 
 ---
 
-## Step 2 — Run Data Pipeline Locally (~3h)
+## Step 2 — Data Pipeline Overview
+
+If regenerating data from scratch:
 
 ```bash
 cd /Users/deepanshusingh/Desktop/Tower/forgelm
@@ -29,11 +26,11 @@ python -m forgelm.data_pipeline.download_edgar \
     --tickers AAPL MSFT GOOGL NVDA AMD JPM GS BAC META XOM CVX JNJ PFE UNH NFLX \
     --out data/corpus --max-filings 20
 
-# 2b. Generate SFT tool-call data via Claude (~1.5h, ~$8)
+# 2b. Generate SFT tool-call data (supports Gemini or Claude or programmatic fallback)
 python -m forgelm.data_pipeline.gen_toolcall_data \
     --n-target 500 --seed 42 --out data/sft/sft_toolcall.jsonl
 
-# 2c. Generate event-extraction SFT data (~30 min, ~$3)
+# 2c. Generate event-extraction SFT data
 python -m forgelm.data_pipeline.gen_sft_events \
     --n-target 200 --seed 42 --out data/events/sft_events.jsonl
 
@@ -106,12 +103,13 @@ echo "Eval examples: $(wc -l < eval/eval_data.jsonl)"
 
 1. Click **Run All** (or Shift+Enter cell by cell)
 2. Kaggle auto-saves output to `/kaggle/working/`
-3. Training stages run sequentially:
-   - Stage 1 DAPT: ~3h
-   - Stage 2 SFT: ~2h
-   - Stage 3 DPO: ~1.5h
-   - Eval all 4 checkpoints: ~1h
-   - Stats report: ~2 min
+3. Training stages run sequentially with automated adapter merging:
+   - **Stage 1 DAPT**: ~3h → automatically merged into `/kaggle/working/checkpoints/stage1_merged`
+   - **Stage 2 SFT**: ~2h (trained with `max_seq_len=512` on merged DAPT base) → merged into `/kaggle/working/checkpoints/stage2_merged`
+   - **Stage 3 DPO**: ~1.5h (policy + reference initialized on clean SFT base)
+   - **Eval all 4 checkpoints**: ~1h (evaluates base, dapt, sft, dpo on 300 decontaminated examples)
+   - **3-Seed Stability Check**: runs seeds 42, 123, 2024
+   - **Stats report**: ~2 min (`python -m forgelm.eval.stats_report` creates `eval/results.md`)
 
 > [!NOTE]
 > If you hit the 30h/week GPU limit, save checkpoints after each stage

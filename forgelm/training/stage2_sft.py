@@ -87,7 +87,7 @@ def load_sft_dataset(toolcall_path: Path, events_path: Path, tokenizer, seed: in
 
 def train(cfg: StageConfig, stage1_dir: Path,
           toolcall_path: Path, events_path: Path) -> dict:
-    from peft import PeftModel, prepare_model_for_kbit_training
+    from peft import PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import SFTConfig, SFTTrainer
 
@@ -99,13 +99,26 @@ def train(cfg: StageConfig, stage1_dir: Path,
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Load base + apply stage1 LoRA adapter
-    base = AutoModelForCausalLM.from_pretrained(
-        cfg.base_model, quantization_config=bnb_config, device_map="auto",
-        trust_remote_code=True,
+    # Load base model (either merged model directly or base + adapter)
+    adapter_cfg = stage1_dir / "adapter_config.json"
+    if adapter_cfg.exists():
+        log.info("loading_peft_adapter", adapter_dir=str(stage1_dir))
+        base = AutoModelForCausalLM.from_pretrained(
+            cfg.base_model, quantization_config=bnb_config, device_map="auto",
+            trust_remote_code=True,
+        )
+        model = PeftModel.from_pretrained(base, str(stage1_dir))
+    else:
+        log.info("loading_merged_base", model_dir=str(stage1_dir))
+        model = AutoModelForCausalLM.from_pretrained(
+            str(stage1_dir), quantization_config=bnb_config, device_map="auto",
+            trust_remote_code=True,
+        )
+        model = get_peft_model(model, lora_config)
+
+    model = prepare_model_for_kbit_training(
+        model, use_gradient_checkpointing=cfg.gradient_checkpointing
     )
-    model = PeftModel.from_pretrained(base, str(stage1_dir))
-    model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=cfg.gradient_checkpointing)  # noqa: E501
 
     dataset = load_sft_dataset(toolcall_path, events_path, tokenizer, seed=cfg.seed)
     out_dir = cfg.output_dir / "stage2_sft"
@@ -129,7 +142,7 @@ def train(cfg: StageConfig, stage1_dir: Path,
         dataset_text_field="text",
     )
     trainer = SFTTrainer(model=model, args=sft_cfg, train_dataset=dataset)
-    log.info("sft_train_start", n=len(dataset), seed=cfg.seed)
+    log.info("sft_train_start", n=len(dataset), seed=cfg.seed, max_seq_len=cfg.max_seq_len)
     result = trainer.train()
     trainer.save_model(str(out_dir / "final"))
     tokenizer.save_pretrained(str(out_dir / "final"))
@@ -157,9 +170,12 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--epochs", type=int, default=2)
+    p.add_argument("--max-seq-len", type=int, default=512)
     args = p.parse_args()
-    cfg = StageConfig(stage=2, seed=args.seed, output_dir=args.output_dir,
-                      lr=args.lr, num_epochs=args.epochs)
+    cfg = StageConfig(
+        stage=2, seed=args.seed, output_dir=args.output_dir,
+        lr=args.lr, num_epochs=args.epochs, max_seq_len=args.max_seq_len,
+    )
     metrics = train(cfg, args.stage1_dir, args.sft_toolcall, args.sft_events)
     print(json.dumps(metrics, indent=2))
 
