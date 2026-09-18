@@ -1,0 +1,20 @@
+{
+  "base": {
+    "json_schema_rate": 0.0,
+    "tool_name_recall": 0.0,
+    "ticker_recall": 0.312,
+    "n": 16
+  },
+  "sft": {
+    "json_schema_rate": 0.0,
+    "tool_name_recall": 0.0,
+    "ticker_recall": 0.375,
+    "n": 16
+  },
+  "dpo": {
+    "json_schema_rate": 0.0,
+    "tool_name_recall": 0.0,
+    "ticker_recall": 0.312,
+    "n": 16
+  }
+}
