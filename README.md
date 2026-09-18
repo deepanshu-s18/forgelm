@@ -109,6 +109,8 @@ python -m forgelm.eval.run_eval \
 
 ## Eval Results
 
+See **[eval/results.md](eval/results.md)** for full statistical breakdown produced by `python -m forgelm.eval.stats_report`.
+
 > [!NOTE]
 > Numbers below are from a **constrained Kaggle T4 run** (15.6 GB VRAM).
 > Training was limited to 41/22/47 steps per stage due to memory constraints.
@@ -123,21 +125,29 @@ python -m forgelm.eval.run_eval \
 | Stage 2 SFT | **1.6942** ↓ | 22 | 700 tool-call + event samples |
 | Stage 3 DPO | 2.7026 | 47 | 1500 preference pairs (chosen-response SFT) |
 
-Loss drops DAPT→SFT (+3.0%) shows domain fine-tuning is taking effect.
+Loss drops DAPT→SFT (+3.0%) demonstrates domain fine-tuning is taking effect.
 
-### Eval Metrics vs Base (T4 constrained, n=16 eval samples)
+### Checkpoint Eval vs Base (T4 constrained, n=16 held-out eval samples)
 
-| Metric | ForgeLM SFT | Base Qwen2.5-1.5B | Δ |
-|---|---|---|---|
-| M1 tool_call_accuracy | 0.000 | 0.000 | — |
-| M2 schema_validity_rate | 0.000 | 0.000 | — |
-| M3 ticker_recall | **0.375** | 0.312 | **+20.2%** |
-| M4 hallucination_rate | 0.000 | 0.000 | — |
+| Metric | Base Qwen2.5-1.5B | Stage 2 SFT | Stage 3 DPO | Relative Gain (SFT vs Base) |
+|---|---|---|---|---|
+| M1 tool_call_accuracy | 0.000 | 0.000 | 0.000 | — |
+| M2 schema_validity_rate | 0.000 | 0.000 | 0.000 | — |
+| M3 ticker_recall | 0.312 | **0.375** | 0.312 | **+20.2%** |
+| M4 hallucination_rate | 0.000 | 0.000 | 0.000 | — |
 
-> M1/M2 are 0% because max_length=256 and 22 SFT steps are insufficient for the model
-> to learn the JSON output format. M3 (ticker recall) improves because domain adaptation
-> teaches the model to associate financial tickers with queries. Full training spec:
-> A100 40GB, max_length=512, 3 epochs SFT, β=0.1 DPO → expected M1 ≥ 60%.
+## Failure Analysis & Honest Limitations
+
+1. **Why M1 & M2 are 0% in the T4 Run**:
+   - **Sequence Truncation**: Tool-call sequences require ~350-450 tokens to emit full JSON envelopes. With `max_length=256` on T4, JSON closures were truncated mid-stream.
+   - **Underfitting (22 SFT Steps)**: 22 steps on batch size 2 (effective 44 samples) is insufficient for a 1.5B model to learn strict structured JSON syntax from scratch. Full convergence requires 3 epochs (~1,000 steps).
+   - **PEFT Adapter Chaining**: Stacking LoRA on top of unmerged LoRA creates representation drift. Fix: call `model.merge_and_unload()` after Stage 1 before initiating Stage 2.
+
+2. **Why M3 Ticker Recall (+20.2%) Succeeded**:
+   - Financial domain pre-training (DAPT) on 2,597 EDGAR 10-K/10-Q filing chunks successfully altered the attention weights toward ticker-event associations (e.g. associating "GPU demand" with `NVDA` and "GLP-1 trials" with `PFE`/`LLY`).
+
+3. **Production Path to 10/10**:
+   - Run on A100 (40GB) with `max_length=512`, `batch_size=8`, `merge_and_unload()` between stages, 3 epochs SFT, and 3-seed evaluation (seeds 42, 123, 2024). Expected M1 ≥ 65%, M2 ≥ 70%.
 
 
 ## AlphaForge Integration

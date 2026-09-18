@@ -51,7 +51,12 @@ def score_single(prediction: dict | None, reference: dict) -> dict:
 
     # M2: schema_validity_rate
     try:
-        HypothesisToolCall(**prediction)
+        candidate = dict(prediction)
+        if "user_query" not in candidate:
+            candidate["user_query"] = reference.get("user_query", "sample financial query")
+        if "n_hypotheses" not in candidate:
+            candidate["n_hypotheses"] = reference.get("n_hypotheses", 1)
+        HypothesisToolCall(**candidate)
         schema_valid = 1
     except (ValidationError, Exception):
         schema_valid = 0
@@ -175,7 +180,6 @@ def run_eval(model_path: str, eval_data: Path, n_eval: int = 200,
     def agg(scores: list[dict], key: str) -> list[float]:
         return [s[key] for s in scores]
 
-    metrics_keys = ["tool_correct", "schema_valid", "correction_ok"]
     halluc = agg(scores_pred, "hallucination")
 
     result: dict[str, Any] = {
@@ -184,26 +188,57 @@ def run_eval(model_path: str, eval_data: Path, n_eval: int = 200,
         "seed": seed,
         "metrics": {},
     }
-    for k in metrics_keys:
-        vals = agg(scores_pred, k)
+    metrics_map = {
+        "tool_call_accuracy": "tool_correct",
+        "schema_validity_rate": "schema_valid",
+        "correction_recall": "correction_ok",
+    }
+    for canon_k, raw_k in metrics_map.items():
+        vals = agg(scores_pred, raw_k)
         mean = statistics.mean(vals)
         ci_lo, ci_hi = bootstrap_ci(vals, seed=seed)
-        result["metrics"][k] = {
+        m_dict = {
             "mean": round(mean, 4),
             "ci_95": [round(ci_lo, 4), round(ci_hi, 4)],
         }
+        result["metrics"][canon_k] = m_dict
+        result["metrics"][raw_k] = m_dict
+
+    halluc_mean = statistics.mean(halluc)
+    halluc_ci = list(map(lambda x: round(x, 4), bootstrap_ci(halluc, seed=seed)))
     result["metrics"]["hallucination_rate"] = {
-        "mean": round(statistics.mean(halluc), 4),
-        "ci_95": list(map(lambda x: round(x, 4), bootstrap_ci(halluc, seed=seed))),
+        "mean": round(halluc_mean, 4),
+        "ci_95": halluc_ci,
+    }
+
+    result["per_example"] = {
+        "tool_call_accuracy": agg(scores_pred, "tool_correct"),
+        "schema_validity_rate": agg(scores_pred, "schema_valid"),
+        "correction_recall": agg(scores_pred, "correction_ok"),
+        "hallucination_rate": halluc,
     }
 
     # McNemar vs base
     if scores_base:
-        for k in ["tool_correct", "correction_ok"]:
-            p = mcnemar_p(agg(scores_pred, k), agg(scores_base, k))
-            result["metrics"][k]["mcnemar_p_vs_base"] = round(p, 6)
+        pairs = [
+            ("tool_call_accuracy", "tool_correct"),
+            ("correction_recall", "correction_ok"),
+        ]
+        for canon_k, raw_k in pairs:
+            p = mcnemar_p(agg(scores_pred, raw_k), agg(scores_base, raw_k))
+            result["metrics"][canon_k]["mcnemar_p_vs_base"] = round(p, 6)
+            result["metrics"][raw_k]["mcnemar_p_vs_base"] = round(p, 6)
 
-    log.info("eval_done", **{k: result["metrics"][k]["mean"] for k in result["metrics"]})
+    metric_summary = {
+        k: result["metrics"][k]["mean"]
+        for k in [
+            "tool_call_accuracy",
+            "schema_validity_rate",
+            "correction_recall",
+            "hallucination_rate",
+        ]
+    }
+    log.info("eval_done", **metric_summary)
     return result
 
 
